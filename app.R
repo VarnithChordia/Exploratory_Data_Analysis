@@ -10,6 +10,8 @@ library(gridExtra)
 library(plotly)
 library(descr)
 library(e1071)
+library(lazyeval)
+library(knitr)
 
 ui<-fluidPage(
   navbarPage(
@@ -22,15 +24,21 @@ ui<-fluidPage(
           visualizations and descriptive statistics to explore relationship within the dataset. The application contains the following tabs -"),
       br(),
       strong("1.Load File-"),
-      span('Upload a file,of maximum size 30 Mb.Choose an appropriate seperator and click on check boxes'),
+      span('Upload a file,of maximum size 30 Mb.You can use an existing dataset or upload your own.There are two existing datasets- (i) Housing prices from Ames Iowa (ii) Iris. If you are selecting your own data,click on the button to "choose your own data" and then select an appropriate seperator and click on check boxes (I would highly suggest you click on both)'),
       strong('- Headers & StringsAsFactors.'),
-      span('Then click on Submit!'),
-      span(span('This opens three tabs-'),strong('(i) About the file-'),span('Location and Size'),strong('(ii) Data-'),span('Displaying the top few observations'),strong('(iii) Convert_Variables-'),span('Converts selected numeric variables to factors.')),
+      span('Click on Submit!'),
+      span(span('This opens three tabs on the same page-'),br(),strong('(i) About the file-'),span('Location and Size of the dataset'),br(),strong('(ii) Data-'),span('This displays the top 10 observations of the dataset'),br(),strong('(iii) Convert_Variables-'),span('Sometimes, it is required to convert numeric to categorical variables. This converts selected numeric variables to factors.')),
+      br(),
+      br(),
       div(strong("2.Summary-"),span('This provides a missing value plot and summary statistics of variables in the dataset.')),
-      div(strong('3.Univariate Analysis-'),span('This tab displays distributions of variables present in the dataset.Density plot for numeric variables and bar charts for factor variables.A grid plot is made,with a maximum of 4 different plots.')),
+      br(),
+      div(strong('3.Univariate Analysis-'),span('This tab displays distributions of variables present in the dataset.Density plot for numeric variables and bar charts for factor variables.A grid plot is obtained,a maximum of 4 variables can be selected.')),
+      br(),
       div(strong('4.Binning-'),span('In this tab transformation of continous variables into binned variables with equally sized bins is possible.Using percentile cutoffs,the variable can be split.Binning is useful for outlier treatment and strength of association tests.')),
-      div(strong('5.Bivariate_Analysis-'),span('Explores relationship between two variables at a time,producing scatterplots,boxplots,stacked-barcharts and correlation analysis.This mode also creates cross tables and chisq statistic')),
-      div(strong('6.Cluster_Analysis-'),span('K-means clustering can be performed on the dataset.This is a partioning approach,where the data are partitioned based on iterative algorithm.Clusters must be pre specified before.'))
+      br(),
+      div(strong('5.Bivariate_Analysis-'),span('Explores relationship between two variables at a time,producing scatterplots,boxplots,stacked-barcharts and correlation analysis.To understand the graphs better the tool also presents crosstable and chisquare test statistic.')),
+      br(),
+      div(strong('6.Cluster_Analysis-'),span('K-means clustering can be performed on the dataset.This is a partioning approach,to segregate the data into different classes.The number of clusters must be pre specified using the sliding bar in the tab .'))
       
       )
       
@@ -39,19 +47,14 @@ ui<-fluidPage(
     tabPanel("Load File",
              sidebarLayout(
                sidebarPanel(
-                 fileInput("file","Upload the file"), # fileinput() function is used to get the file upload contorl option
-                 helpText("Default max. file size is 30MB"),
-                 tags$hr(),
-                 h5(helpText("Select the read.table parameters below")),
-                 checkboxInput(inputId = 'header', label = 'Header', value = FALSE),
-                 checkboxInput(inputId = "stringAsFactors", "StringAsFactors", FALSE),
-                 br(),
-                 radioButtons(inputId = 'sep', label = 'Separator', 
-                              choices = c(Comma=',',Semicolon=';',Tab='\t', Space=''), selected = ','),
-                 actionButton("goButton","Submit!")
+                 radioButtons(inputId = 'sep1', label = 'What kind of data you want to analyze', 
+                              choices = c("Choose an existing dataset" =',',"Upload a new one"=';'), selected = ';'),width =12,
+                 uiOutput("ts1")
+
                ),
-               mainPanel(
-                 uiOutput("tb")
+               mainPanel(tags$style(type="text/css",
+                                    ".shiny-output-error { visibility: hidden; }",
+                                    ".shiny-output-error:before { visibility: hidden; }"),width = 8
                )
              )
              
@@ -124,10 +127,16 @@ ui<-fluidPage(
                                                   plotlyOutput("EDA1"),
                                                   br(),
                                                   br(),
-                                                  verbatimTextOutput("tt1"),
+                                                  verbatimTextOutput("tt2"),
+                                                  br(),
+                                                  br(),
+                                                  tableOutput("tt1"),
                                                   tableOutput("EDA2"),
                                                   br(),
+                                                  br(),
                                                   plotlyOutput("EDA3")
+                                                  
+                                                  
                                                   
                                                   
                                                 ))),
@@ -166,11 +175,53 @@ ui<-fluidPage(
 
 
 
-options(shiny.maxRequestSize=50*1024^2)
+options(shiny.maxRequestSize=32*1024^2)
 
 server <- function(input, output) {
   
   values <- reactiveValues(df_data = NULL)
+  
+  dataset<-c("Housing Prices","Iris")
+  
+  output$ts1<-renderUI({
+    
+    if (input$sep1==';'){
+    sidebarLayout(sidebarPanel(
+    fileInput("file","Upload the file"), # fileinput() function is used to get the file upload control option
+    helpText("Default max. file size is 30MB"),
+    tags$hr(),
+    h5(helpText("Select the read.table parameters below")),
+    checkboxInput(inputId = 'header', label = 'Header', value = FALSE),
+    checkboxInput(inputId = "stringAsFactors", "StringAsFactors", FALSE),
+    br(),
+    radioButtons(inputId = 'sep', label = 'Separator', 
+                 choices = c(Comma=',',Semicolon=';',Tab='\t', Space=''), selected = ','),
+    actionButton("goButton","Submit!")
+    ),
+    mainPanel(
+      uiOutput("tb")
+    
+    ))
+    
+    }
+    
+    else{
+      
+      sidebarLayout(sidebarPanel(
+      selectInput('vars1',label='Select a dataset',choices=as.list(dataset),selected = NULL),
+      actionButton("goButton2","Submit!")
+      ),
+      mainPanel(
+        uiOutput("tb2")
+        
+      ))
+      
+      
+      
+    }
+    
+  })
+  
   
   observeEvent(input$goButton, {
     file1<-input$file
@@ -179,11 +230,28 @@ server <- function(input, output) {
     
   })
   
+
+  
+  
+  
   observeEvent(input$goButton1, {
-    values$df_data[,which(colnames(values$df_data) %in% input$var3)]<-lapply(values$df_data[,which(colnames(values$df_data) %in% input$var3)],function(x){as.factor(as.character(x))})
-    
+  
+    values$df_data[,which(colnames(values$df_data) %in% input$var3)]<-lapply(values$df_data[,which(colnames(values$df_data) %in% input$var3)],function(x){as.factor((x))})
     
   })
+  
+  
+  observeEvent(input$goButton2, {
+    if (input$vars1[1]=='Housing Prices'){
+    values$df_data <- read.csv('./Data/train.csv',stringsAsFactors =T)
+    }
+    else if (input$vars1[1]=='Iris'){
+      values$df_data <- read.csv('./Data/iris.csv',stringsAsFactors =T)
+    }
+    
+  })
+  
+  
   
   output$filedf<-renderTable({
     if(is.null(values$df_data)){return()}
@@ -207,11 +275,11 @@ server <- function(input, output) {
     if (input$goButton){
       if(is.null(values$df_data)){return()}
       else
-        tabsetPanel("",tabPanel("About file",tableOutput("filedf")),
+        tabsetPanel(tabPanel("About file",tableOutput("filedf")),
                     tabPanel("Data",tableOutput("table")),tabPanel("Convert_Variables","",
                                                                    sidebarLayout(
                                                                      sidebarPanel(
-                                                                       selectizeInput('var3',label='Variables to be converted to factors',choices=names(values$df_data),multiple=T),
+                                                                       selectizeInput('var3',label='Variables to be converted to factors',choices=names(values$df_data),multiple=T),width=6,
                                                                        actionButton("goButton1","Submit!")
                                                                      ),
                                                                      mainPanel(
@@ -220,6 +288,27 @@ server <- function(input, output) {
         )
     }
   })
+  
+  
+  output$tb2<-renderUI({
+    if (input$goButton2){
+      if(is.null(values$df_data)){return()}
+      else
+        tabsetPanel(tabPanel("Data",tableOutput("table")),tabPanel("Convert_Variables","",
+                                                                   sidebarLayout(
+                                                                     sidebarPanel(
+                                                                       selectizeInput('var3',label='Variables to be converted to factors',choices=names(values$df_data),multiple=T),width=6,
+                                                                       actionButton("goButton1","Submit!")
+                                                                     ),
+                                                                     mainPanel(
+                                                                       verbatimTextOutput("text1")
+                                                                     )))
+        )
+    }
+  })
+
+  
+  
   
   
   numeric_df<-reactive({
@@ -272,8 +361,12 @@ server <- function(input, output) {
   
   output$Univariate<-renderUI({
     if (is.null(values$df_data)){return()}
-    if  (input$goButton){
-      selectizeInput('vars',label='Select A Variable',choices=names(values$df_data),multiple=T,selected=NULL)
+     if  (input$goButton){
+      selectizeInput('vars',label='Select Variables (upto 4)',choices=names(values$df_data),multiple=T,selected=NULL)
+     }
+      else if (input$goButton2){
+        selectizeInput('vars',label='Select Variables (upto 4)',choices=names(values$df_data),multiple=T,selected=NULL)
+    
     }
   })
   
@@ -384,7 +477,7 @@ server <- function(input, output) {
     else{
       grid.arrange(grobs=ptlist,ncol=2,nrow=2)
     }
-  },height = 600,width=800)
+  },height = 600,width=1200)
   
   
   
@@ -393,6 +486,12 @@ server <- function(input, output) {
   output$Binning<-renderUI({
     if (is.null(values$df_data)){return()}
     if  (input$goButton){
+      tagList(selectizeInput('Numerics',label='Select A Variable',choices=names(numeric_df()),selected=NULL),
+              sliderInput('Slide',label='Select the number of equally sized buckets te create',min=2,max=10,value=2,step=1)
+      )
+      
+    }
+    else if (input$goButton2){
       tagList(selectizeInput('Numerics',label='Select A Variable',choices=names(numeric_df()),selected=NULL),
               sliderInput('Slide',label='Select the number of equally sized buckets te create',min=2,max=10,value=2,step=1)
       )
@@ -435,6 +534,9 @@ server <- function(input, output) {
     if  (input$goButton){
       selectizeInput('var1',label='Select any two  variables',multiple=T,choices=names(values$df_data))
     }
+    else if  (input$goButton2){
+      selectizeInput('var1',label='Select any two  variables',multiple=T,choices=names(values$df_data))
+    }
   })
   
   
@@ -444,10 +546,20 @@ server <- function(input, output) {
       if((is.numeric(eval(Final_train1()))==TRUE) & (is.factor(eval(Final_train2()))==TRUE)){
         selectizeInput('vari',label='Select a factor Variable',choices=names(factor_df()),selected=NULL)
       }
-      if((is.factor(eval(Final_train1()))==TRUE) & (is.numeric(eval(Final_train2()))==TRUE)){
+      else if((is.factor(eval(Final_train1()))==TRUE) & (is.numeric(eval(Final_train2()))==TRUE)){
         selectizeInput('vari',label='Select a factor Variable',choices=names(factor_df()),selected=NULL)
       }
     }
+    else if  (input$goButton2){
+      if((is.numeric(eval(Final_train1()))==TRUE) & (is.factor(eval(Final_train2()))==TRUE)){
+        selectizeInput('vari',label='Select a factor Variable',choices=names(factor_df()),selected=NULL)
+      }
+      else if((is.factor(eval(Final_train1()))==TRUE) & (is.numeric(eval(Final_train2()))==TRUE)){
+        selectizeInput('vari',label='Select a factor Variable',choices=names(factor_df()),selected=NULL)
+      }
+    }
+    
+    
   })
   
   Final_train1<-reactive({values$df_data[,which(colnames(values$df_data)==input$var1[1])]})
@@ -520,47 +632,66 @@ server <- function(input, output) {
   
   
   
-  
-  output$Corr<-renderPlot({
-    corrplot(cor(na.omit(numeric_df())),method="number")
-    
-  },height =800,width=1000)
-  
-  
   output$EDA2<-renderTable({
     
     Final_train<-reactive({
       t<-data.frame(Final_train1(),Final_train2())
+      names(t)[1]<-input$var1[1]
+      names(t)[2]<-input$var1[2]
       t
     })
     
-    
     if((is.factor(eval(Final_train1()))==TRUE) & (is.numeric(eval(Final_train2()))==TRUE)) {
       
-      Final_train() %>% dplyr::group_by(Final_train1..) %>% dplyr::summarise(.,Min=min(Final_train2..,na.rm=T),Max=max(Final_train2..,na.rm=T),
-                                                                             Mean=mean(Final_train2..,na.rm=T),Median=median(Final_train2..,na.rm=T),Sum=sum(Final_train2..,na.rm=T),count=n())
+      
+      
+      k<-Final_train() %>% dplyr::group_by_(names(Final_train())[1]) %>% dplyr::summarise_(Min=interp(~min(var, na.rm = TRUE), var = as.name(names(Final_train())[2])),
+                                                                                           Max=interp(~max(var, na.rm = TRUE), var = as.name(names(Final_train())[2])),
+                                                                                           Mean=interp(~mean(var, na.rm = TRUE), var = as.name(names(Final_train())[2])),
+                                                                                           Median=interp(~median(var, na.rm = TRUE), var = as.name(names(Final_train())[2])),
+                                                                                           Sum=interp(~sum(var, na.rm = TRUE), var = as.name(names(Final_train())[2])))
+      names(k)[2]<-paste("Min_",names(Final_train())[2],sep="")
+      names(k)[3]<-paste("Max_",names(Final_train())[2],sep="")
+      names(k)[4]<-paste("Mean_",names(Final_train())[2],sep="")
+      names(k)[5]<-paste("Median_",names(Final_train())[2],sep="")
+      names(k)[6]<-paste("Sum_",names(Final_train())[2],sep="")
+      
+      k
       
     }
     
     else if((is.numeric(eval(Final_train1()))==TRUE) & (is.factor(eval(Final_train2()))==TRUE)) {
       
-      Final_train() %>% dplyr::group_by(Final_train2..) %>% dplyr::summarise(.,Min=min(Final_train1..,na.rm=T),Max=max(Final_train1..,na.rm=T),
-                                                                             Mean=mean(Final_train1..,na.rm=T),Median=median(Final_train1..,na.rm=T),Sum=sum(Final_train1..,na.rm=T),count=n())
       
+      k<-Final_train() %>% dplyr::group_by_(names(Final_train())[2]) %>% dplyr::summarise_(Min=interp(~min(var, na.rm = TRUE), var = as.name(names(Final_train())[1])),
+                                                                                           Max=interp(~max(var, na.rm = TRUE), var = as.name(names(Final_train())[1])),
+                                                                                           Mean=interp(~mean(var, na.rm = TRUE), var = as.name(names(Final_train())[1])),
+                                                                                           Median=interp(~median(var, na.rm = TRUE), var = as.name(names(Final_train())[1])),
+                                                                                           Sum=interp(~sum(var, na.rm = TRUE), var = as.name(names(Final_train())[1])))
       
+      names(k)[2]<-paste("Min_",names(Final_train())[1],sep="")
+      names(k)[3]<-paste("Max_",names(Final_train())[1],sep="")
+      names(k)[4]<-paste("Mean_",names(Final_train())[1],sep="")
+      names(k)[5]<-paste("Median_",names(Final_train())[1],sep="")
+      names(k)[6]<-paste("Sum_",names(Final_train())[1],sep="")
+      
+      k
     }
     
     
+    
   })
+  
+  
   
   output$EDA3 <- renderPlotly({
     
     if((is.factor(eval(Final_train1()))==TRUE) & (is.numeric(eval(Final_train2()))==TRUE)) {
       
-      a<-ggplot(values$df_data,aes_string(input$var1[1],input$var1[2],fill=input$vari))+geom_bar(stat="identity",position ="stack")+theme(plot.subtitle = element_text(vjust = 1), 
+      a<-ggplot(values$df_data,aes_string(input$var1[1],input$var1[2],fill=input$vari))+geom_bar(stat="identity",position ="dodge")+theme(plot.subtitle = element_text(vjust = 1), 
                                                                                                                                           plot.caption = element_text(vjust = 1), panel.background = element_rect(fill = "antiquewhite"),panel.grid.major = element_line(colour = "gray98"),
                                                                                                                                           panel.grid.minor = element_line(colour = "gray98"),axis.text.x = element_text(angle = 25))+
-        labs(title=paste(input$var1[2],"vs",input$var1[1],sep=" "))+
+        labs(title=paste(input$var1[2],"vs",input$var1[1],"across",input$vari,sep=" "))+
         scale_y_continuous(labels = scales::comma)
       
       print(ggplotly(a))
@@ -568,7 +699,7 @@ server <- function(input, output) {
     
     else if((is.numeric(eval(Final_train1()))==TRUE) & (is.factor(eval(Final_train2()))==TRUE)) {
       
-      a<-ggplot(values$df_data,aes_string(input$var1[2],input$var1[1],fill=input$vari))+geom_bar(stat="identity",position ="stack")+theme(plot.subtitle = element_text(vjust = 1), 
+      a<-ggplot(values$df_data,aes_string(input$var1[2],input$var1[1],fill=input$vari))+geom_bar(stat="identity",position ="dodge")+theme(plot.subtitle = element_text(vjust = 1), 
                                                                                                                                           plot.caption = element_text(vjust = 1), panel.background = element_rect(fill = "antiquewhite"),panel.grid.major = element_line(colour = "gray98"),
                                                                                                                                           panel.grid.minor = element_line(colour = "gray98"),axis.text.x = element_text(angle = 25))+
         labs(title=paste(input$var1[2],"vs",input$var1[1],sep=" "))+
@@ -582,18 +713,40 @@ server <- function(input, output) {
     
   })
   
+  
+  output$tt2<-renderPrint({
+    if((is.factor(eval(Final_train1()))==TRUE) & (is.factor(eval(Final_train2()))==TRUE)){
+      J1<-crosstab(Final_train1(),Final_train2(),prop.r = T,prop.c = T,prop.t = T,chisq = T)
+      J1$CST
+    }
+  })
+  
+  
+  
+  
+  output$tt1<-renderTable({
+    if((is.factor(eval(Final_train1()))==TRUE) & (is.factor(eval(Final_train2()))==TRUE)){
+      J1<-crosstab(Final_train1(),Final_train2(),prop.r = T,prop.c = T,prop.t = T,chisq = T)
+      K1<-as.data.frame(J1$tab)
+      names(K1)[1]<-input$var1[1]
+      names(K1)[2]<-input$var1[2]
+      names(K1)[3]<-"Frequency"
+      J2<-as.data.frame(J1$prop.tbl)
+      S1<-as.data.frame(cbind(K1,J2$Freq))
+      names(S1)[4]<-"Proportion"
+      S1$Proportion<-paste(round(100*S1$Proportion, 2), "%", sep="")
+      S1
+    }
+  })
+  
+  
+  
+  
   output$Corr<-renderPlot({
     corrplot(cor(na.omit(numeric_df())),method="number")
     
-  },height =1000,width=1200)
+  },height =1200,width=1400)
   
-  
-  output$tt1<-renderPrint({
-    if((is.factor(eval(Final_train1()))==TRUE) & (is.factor(eval(Final_train2()))==TRUE)){
-      K<-crosstab(Final_train1(),Final_train2(),prop.r = T,prop.c = T,chisq = T)
-      K
-    }
-  })
   
   output$Cluster<-renderUI({
     if (is.null(values$df_data)){return()}
@@ -602,6 +755,13 @@ server <- function(input, output) {
                selectizeInput('YCluster',label='Select Y axis Variable',choices=names(numeric_df()),selected=NULL),
                sliderInput('ClusterSlide',label='Select the number of clusters',min=2,max=9,value=2,step=1))  
     }
+    else if  (input$goButton2){
+      tagList( selectizeInput('XCluster',label='Select X axis Variable',choices=names(numeric_df()),selected=NULL),
+               selectizeInput('YCluster',label='Select Y axis Variable',choices=names(numeric_df()),selected=NULL),
+               sliderInput('ClusterSlide',label='Select the number of clusters',min=2,max=9,value=2,step=1))  
+    }
+    
+    
   })
   
   
